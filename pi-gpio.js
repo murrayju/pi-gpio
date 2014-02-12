@@ -32,6 +32,13 @@ var pinMapping2V512 = {
 	"13" : 27
 };
 
+var revision = fs.readFileSync('/proc/cpuinfo', 'utf-8').match(/Revision\t\:\s([\d\w]+)/);
+if(revision && parseInt(revision[1], 16) > 3){
+	for(var pin in pinMapping2V512){
+		pinMapping[pin] = pinMapping2V512[pin];
+	}
+}
+
 function isNumber(number) {
 	return !isNaN(parseInt(number, 10));
 }
@@ -125,14 +132,6 @@ var gpio = {
 		value = !!value?"1":"0";
 
 		fs.writeFile(sysFsPath + "/gpio" + pinMapping[pinNumber] + "/value", value, "utf8", callback);
-	},
-
-	setPi : function(version){
-		if(version == 512){
-			for(var pin in pinMapping2V512){
-				pinMapping[pin] = pinMapping2V512[pin];
-			}
-		}
 	}
 };
 

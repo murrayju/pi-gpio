@@ -232,10 +232,6 @@ That's it!
 
 ## Usage
 
-### .setPi(version)
-The new Raspberry Pi (Model B with 512MB RAM) changed some GPIO pins.
-If user pi-gpio for that, you should call this mathod at first, and give the argument ``512`` for it.
-
 ### .open(pinNumber, [direction = "output"], [callback])
 
 Aliased to ``.export``
