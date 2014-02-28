@@ -1,7 +1,8 @@
 "use strict";
 var fs = require("fs"),
 	path = require("path"),
-	exec = require("child_process").exec;
+	exec = require("child_process").exec,
+	q = require("q");
 
 var gpioAdmin = "gpio-admin",
 	sysFsPath = "/sys/devices/virtual/gpio";
@@ -43,18 +44,27 @@ function isNumber(number) {
 	return !isNaN(parseInt(number, 10));
 }
 
-function noop(){}
+function qExec (command, options) {
+	var defer = q.defer();
 
-function handleExecResponse(method, pinNumber, callback) {
-	return function(err, stdout, stderr) {
-		if(err) {
-			console.error("Error when trying to", method, "pin", pinNumber);
-			console.error(stderr);
-			callback(err);
+	exec(command, options, function (error, stdout, stderr) {
+		if (error) {
+			defer.reject({
+				error: error,
+				stdout: stdout,
+				stderr: stderr
+			});
 		} else {
-			callback();
+			defer.resolve(stdout);
 		}
-	}
+	});
+
+	return defer.promise;
+}
+
+function printExecError(method, pinNumber, err) {
+	console.error("Error when trying to", method, "pin", pinNumber);
+	console.error(err.stderr);
 }
 
 function sanitizePinNumber(pinNumber) {
@@ -77,61 +87,60 @@ function sanitizeDirection(direction) {
 }
 
 var gpio = {
-	open: function(pinNumber, direction, callback) {
+	open: function(pinNumber, direction) {
 		pinNumber = sanitizePinNumber(pinNumber);
+		direction = sanitizeDirection(direction || "out");
 
-		if(!callback && typeof direction === "function") {
-			callback = direction;
-			direction = "out";
-		}
-
-		direction = sanitizeDirection(direction);
-
-		exec(gpioAdmin + " export " + pinMapping[pinNumber], handleExecResponse("open", pinNumber, function(err) {
-			if(err) return (callback || noop)(err);
-
-			gpio.setDirection(pinNumber, direction, callback);
-		}));
+		return qExec(gpioAdmin + " export " + pinMapping[pinNumber])
+			.then(function (stdout) {
+				return gpio.setDirection(pinNumber, direction);
+			}, function (err) {
+				printExecError("open", pinNumber, err);
+				throw err.error;
+			});
 	},
 
-	setDirection: function(pinNumber, direction, callback) {
+	setDirection: function(pinNumber, direction) {
 		pinNumber = sanitizePinNumber(pinNumber);
 		direction = sanitizeDirection(direction);
 
-		fs.writeFile(sysFsPath + "/gpio" + pinMapping[pinNumber] + "/direction", direction, callback);
+		return q.nfcall(fs.writeFile, sysFsPath + "/gpio" + pinMapping[pinNumber] + "/direction", direction);
 	},
 
 	getDirection: function(pinNumber, callback) {
 		pinNumber = sanitizePinNumber(pinNumber);
 
-		fs.readFile(sysFsPath + "/gpio" + pinMapping[pinNumber] + "/direction", "utf8", function(err, direction) {
-			if(err) return callback(err);
-			callback(null, sanitizeDirection(direction.trim()));
-		});
+		return q.nfcall(fs.readFile, sysFsPath + "/gpio" + pinMapping[pinNumber] + "/direction", "utf8")
+			.then(function (direction) {
+				return sanitizeDirection(direction.trim());
+			});
 	},
 
-	close: function(pinNumber, callback) {
+	close: function(pinNumber) {
 		pinNumber = sanitizePinNumber(pinNumber);
 
-		exec(gpioAdmin + " unexport " + pinMapping[pinNumber], handleExecResponse("close", pinNumber, callback || noop));
+		return qExec(gpioAdmin + " unexport " + pinMapping[pinNumber])
+			.then(null, function (err) {
+				printExecError("close", pinNumber, err);
+				throw err.error;
+			});
 	},
 
-	read: function(pinNumber, callback) {
+	read: function(pinNumber) {
 		pinNumber = sanitizePinNumber(pinNumber);
 
-		fs.readFile(sysFsPath + "/gpio" + pinMapping[pinNumber] + "/value", function(err, data) {
-			if(err) return (callback || noop)(err);
-
-			(callback || noop)(null, parseInt(data, 10));
-		});
+		return q.nfcall(fs.readFile, sysFsPath + "/gpio" + pinMapping[pinNumber] + "/value")
+			.then(function (data) {
+				return parseInt(data, 10);
+			});
 	},
 
-	write: function(pinNumber, value, callback) {
+	write: function(pinNumber, value) {
 		pinNumber = sanitizePinNumber(pinNumber);
 
 		value = !!value?"1":"0";
 
-		fs.writeFile(sysFsPath + "/gpio" + pinMapping[pinNumber] + "/value", value, "utf8", callback);
+		return q.nfcall(fs.writeFile, sysFsPath + "/gpio" + pinMapping[pinNumber] + "/value", value, "utf8");
 	}
 };
 
