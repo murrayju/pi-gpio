@@ -107,7 +107,7 @@ var gpio = {
 		return q.nfcall(fs.writeFile, sysFsPath + "/gpio" + pinMapping[pinNumber] + "/direction", direction);
 	},
 
-	getDirection: function(pinNumber, callback) {
+	getDirection: function(pinNumber) {
 		pinNumber = sanitizePinNumber(pinNumber);
 
 		return q.nfcall(fs.readFile, sysFsPath + "/gpio" + pinMapping[pinNumber] + "/direction", "utf8")
